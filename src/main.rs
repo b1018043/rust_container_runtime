@@ -4,7 +4,7 @@ use std::io::{Error,Write};
 
 extern crate nix;
 use nix::sched::{unshare,CloneFlags};
-use nix::unistd::{getuid,getgid};
+use nix::unistd::{getuid,getgid,sethostname};
 
 struct UidGidMap{
     container_id: u32,
@@ -23,10 +23,11 @@ fn main() {
         host_id: getgid().as_raw(),
         size: 1,
     };
-    unshare(CloneFlags::CLONE_NEWUSER|CloneFlags::CLONE_NEWNET|CloneFlags::CLONE_NEWIPC).expect("Failed to unshare.");
+    unshare(CloneFlags::CLONE_NEWUSER|CloneFlags::CLONE_NEWUTS|CloneFlags::CLONE_NEWIPC).expect("Failed to unshare.");
     add_mapping("/proc/self/uid_map", &uid_map).expect("failed add uid");
     init_setgroups();
     add_mapping("/proc/self/gid_map", &gid_map).expect("failed add gid");
+    sethostname("container").expect("failed to hostname");
     let mut p = Command::new("sh").spawn().expect("sh command failed to start");
     p.wait().expect("[Error]: failed to wait");
 }
