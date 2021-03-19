@@ -1,12 +1,13 @@
 use std::process::{Command};
-use std::fs::File;
+use std::fs::{File,remove_dir_all};
 use std::io::{Error,Write};
 
 extern crate nix;
 use nix::sched::{unshare,CloneFlags};
-use nix::unistd::{getuid,getgid,sethostname,fork,ForkResult};
+use nix::unistd::{getuid,getgid,sethostname,fork,ForkResult,chdir,mkdir,pivot_root};
 use nix::sys::wait::{waitpid};
-use nix::mount::{mount,MsFlags};
+use nix::sys::stat::{Mode};
+use nix::mount::{mount,umount2,MsFlags,MntFlags};
 
 struct UidGidMap{
     container_id: u32,
@@ -47,13 +48,31 @@ fn run_container()->Result<(),Error>{
     match unsafe{fork().expect("aa")}{
         ForkResult::Child =>{
 
+            sethostname("container").expect("failed to hostname");
+
             mount(
-                Some("proc"),"/proc",
+                Some("proc"),"/root/rootfs/proc",
                 Some("proc"),MsFlags::empty(),
                 None::<&str>
             ).expect("failed to mount fs");
-        
-            sethostname("container").expect("failed to hostname");
+
+            chdir("/root").expect("failed to /root");
+
+            mount(Some("rootfs"), "/root/rootfs",
+                None::<&str>,
+                MsFlags::MS_BIND|MsFlags::MS_REC,
+                None::<&str>
+            ).expect("failed to mount rootfs");
+
+            mkdir("/root/rootfs/oldrootfs",Mode::S_IRWXU).expect("failed to mkdir oldrootfs");
+
+            pivot_root("rootfs", "/root/rootfs/oldrootfs").expect("failed to pivot_root");
+
+            umount2("/oldrootfs", MntFlags::MNT_DETACH).expect("failed to unmount");
+
+            remove_dir_all("/oldrootfs").expect("failed to remove dir");
+
+            chdir("/").expect("failed to chdir /");
         
             let mut p = Command::new("/bin/sh").spawn().expect("sh command failed to start");
             p.wait().expect("[Error]: failed to wait");
