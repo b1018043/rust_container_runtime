@@ -4,7 +4,7 @@ use std::io::{Error,Write};
 
 extern crate nix;
 use nix::sched::{unshare,CloneFlags};
-use nix::unistd::{getuid,getgid,sethostname,fork,ForkResult,chdir,mkdir,pivot_root};
+use nix::unistd::{getuid,getgid,sethostname,fork,ForkResult,chdir,mkdir,pivot_root,getpid};
 use nix::sys::wait::{waitpid};
 use nix::sys::stat::{Mode};
 use nix::mount::{mount,umount2,MsFlags,MntFlags};
@@ -56,23 +56,25 @@ fn run_container()->Result<(),Error>{
                 None::<&str>
             ).expect("failed to mount fs");
 
-            chdir("/root").expect("failed to /root");
-
-            mount(Some("rootfs"), "/root/rootfs",
-                None::<&str>,
-                MsFlags::MS_BIND|MsFlags::MS_REC,
+            mount(
+                Some("proc"),"/proc",
+                Some("proc"),MsFlags::empty(),
                 None::<&str>
-            ).expect("failed to mount rootfs");
+            ).expect("failed to mount fs");
 
-            mkdir("/root/rootfs/oldrootfs",Mode::S_IRWXU).expect("failed to mkdir oldrootfs");
+            // TODO: fix already exist pattern
+            mkdir("/sys/fs/cgroup/cpu/my-container", Mode::S_IRWXU)
+               .expect("failed to mkdir my-container");
 
-            pivot_root("rootfs", "/root/rootfs/oldrootfs").expect("failed to pivot_root");
+            let mut fd = File::create("/sys/fs/cgroup/cpu/my-container/tasks")
+                .expect("failed to open file");
+            fd.write_all(format!("{}\n",getpid()).as_bytes()).expect("failed edit file");
 
-            umount2("/oldrootfs", MntFlags::MNT_DETACH).expect("failed to unmount");
+            let mut fd = File::create("/sys/fs/cgroup/cpu/my-container/cpu.cfs_quota_us")
+                .expect("failed to open file");
+            fd.write_all(b"1000\n").expect("failed edit file");
 
-            remove_dir_all("/oldrootfs").expect("failed to remove dir");
-
-            chdir("/").expect("failed to chdir /");
+            initialize_pivot_root();
         
             let mut p = Command::new("/bin/sh").spawn().expect("sh command failed to start");
             p.wait().expect("[Error]: failed to wait");
@@ -83,6 +85,26 @@ fn run_container()->Result<(),Error>{
         }
     };
     Ok(())
+}
+
+fn initialize_pivot_root(){
+    chdir("/root").expect("failed to /root");
+
+    mount(Some("rootfs"), "/root/rootfs",
+        None::<&str>,
+        MsFlags::MS_BIND|MsFlags::MS_REC,
+        None::<&str>
+    ).expect("failed to mount rootfs");
+
+    mkdir("/root/rootfs/oldrootfs",Mode::S_IRWXU).expect("failed to mkdir oldrootfs");
+
+    pivot_root("rootfs", "/root/rootfs/oldrootfs").expect("failed to pivot_root");
+
+    umount2("/oldrootfs", MntFlags::MNT_DETACH).expect("failed to unmount");
+
+    remove_dir_all("/oldrootfs").expect("failed to remove dir");
+
+    chdir("/").expect("failed to chdir /");
 }
 
 fn init_setgroups(){
