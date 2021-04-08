@@ -21,20 +21,78 @@ struct UidGidMap{
 }
 
 fn main(){
-    let matches = App::new("Rust container").version("0.1")
-        .author("Taito Morikawa").about("container runtime")
-        .subcommand(SubCommand::with_name("run"))
-            .about("run container")
-            .version("0.1")
-            .author("Taito Morikawa")
+    let id_arg = Arg::with_name("id")
+        .required(true)
+        .takes_value(true)
+        .help("Container ID");
+
+    let app_matches = App::new("Rust container").version("0.1")
+        .author("Taito").about("container runtime")
+        .subcommand(
+            SubCommand::with_name("run")
+        ).about("run container")
+        .subcommand(
+            SubCommand::with_name("state")
+            .arg(&id_arg)
+        ).about("display container state")
+        .subcommand(
+            SubCommand::with_name("create")
+            .arg(&id_arg)
+            .arg(Arg::with_name("bundle")
+                .required(true)
+                .takes_value(true)
+                .help("path of bundle")
+            )
+        ).about("create container")
+        .subcommand(
+            SubCommand::with_name("start")
+            .arg(&id_arg)
+        ).about("start container")
+        .subcommand(
+            SubCommand::with_name("kill")
+            .arg(&id_arg)
+            .arg(  
+                Arg::with_name("signal")
+                .takes_value(true)
+                .required(true)
+                .default_value("TERM")
+                .help("signal to send to container")
+            )
+        ).about("send signal")
+        .subcommand(
+            SubCommand::with_name("delete")
+            .arg(&id_arg)
+        ).about("delete container")
         .get_matches();
 
-    if let Some(_) = matches.subcommand_matches("run") {
-        run_container().expect("Error:run_container() failed.");
-    }
+    match app_matches.subcommand(){
+        ("run",Some(_))=>{ cmd_run();},
+        ("state",Some(matches))=>{ cmd_state(matches.value_of("id").unwrap()); },
+        ("create",Some(matches))=>{ 
+            cmd_create(
+                matches.value_of("id").unwrap(),
+                matches.value_of("bundle").unwrap()
+            );
+        },
+        ("start",Some(matches))=>{
+            cmd_start(matches.value_of("id").unwrap());
+        },
+        ("kill",Some(matches))=>{
+            cmd_kill(
+                matches.value_of("id").unwrap(), 
+                matches.value_of("signal").unwrap()
+            );
+        },
+        ("delete",Some(matches))=>{
+            cmd_delete(
+                matches.value_of("id").unwrap()
+            );
+        },
+        _=>{},
+    };
 }
 
-fn run_container()->Result<()>{
+fn cmd_run()->Result<()>{
 
     let uid_map = UidGidMap{
         container_id: 0,
@@ -101,6 +159,31 @@ fn run_container()->Result<()>{
         }
     };
     Ok(())
+}
+
+fn cmd_state(id: &str){
+    // TODO: implement state
+    println!("id:{}",id);
+}
+
+fn cmd_create(id: &str,bundle: &str){
+    // TODO: implement create
+    println!("id:{}, bundle:{}",id,bundle);
+}
+
+fn cmd_start(id: &str){
+    // TODO: implement start
+    println!("id:{}",id);
+}
+
+fn cmd_kill(id: &str,sig: &str){
+    // TODO: implement kill
+    println!("id:{},signal:{}",id,sig);
+}
+
+fn cmd_delete(id: &str){
+    // TODO: implement delete
+    println!("id:{}",id);
 }
 
 fn initialize_pivot_root(){
