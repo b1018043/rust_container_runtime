@@ -1,6 +1,6 @@
 use std::process::{Command};
 use std::fs::{File,remove_dir_all};
-use std::io::{Error,Write};
+use std::io::{Write};
 
 extern crate nix;
 use nix::sched::{unshare,CloneFlags};
@@ -9,10 +9,17 @@ use nix::sys::wait::{waitpid};
 use nix::sys::stat::{Mode};
 use nix::mount::{mount,umount2,MsFlags,MntFlags};
 
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
+extern crate serde;
+
+mod spec;
+
 extern crate clap;
 use clap::{Arg,App,SubCommand};
 
-use anyhow::Result;
+use anyhow::{Result,Context};
 
 struct UidGidMap{
     container_id: u32,
@@ -20,7 +27,7 @@ struct UidGidMap{
     size: u32,
 }
 
-fn main(){
+fn main()->Result<()>{
     let id_arg = Arg::with_name("id")
         .required(true)
         .takes_value(true)
@@ -66,8 +73,8 @@ fn main(){
         .get_matches();
 
     match app_matches.subcommand(){
-        ("run",Some(_))=>{ cmd_run();},
-        ("state",Some(matches))=>{ cmd_state(matches.value_of("id").unwrap()); },
+        ("run",Some(_))=>{ cmd_run()?},
+        ("state",Some(matches))=>{ cmd_state(matches.value_of("id").unwrap())? },
         ("create",Some(matches))=>{ 
             cmd_create(
                 matches.value_of("id").unwrap(),
@@ -90,6 +97,7 @@ fn main(){
         },
         _=>{},
     };
+    Ok(())
 }
 
 fn cmd_run()->Result<()>{
@@ -161,9 +169,14 @@ fn cmd_run()->Result<()>{
     Ok(())
 }
 
-fn cmd_state(id: &str){
+fn cmd_state(id: &str)->Result<()>{
     // TODO: implement state
+    let path = "bundle/sample1/config.json";
+    let config = File::open(path).with_context(|| format!("Invalid path: {}",path))?;
+    let config: spec::Spec = serde_json::from_reader(config).context("Failed deserialize")?;
+    println!("{:?}",config);
     println!("id:{}",id);
+    Ok(())
 }
 
 fn cmd_create(id: &str,bundle: &str){
